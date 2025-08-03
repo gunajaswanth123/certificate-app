@@ -1,14 +1,17 @@
 from flask import Flask, render_template, request, send_from_directory, redirect, url_for, flash
 import sqlite3
 import os
+import csv
 
 app = Flask(__name__)
 app.secret_key = 'secret123'
 
-# Initialize the database
-def init_db():
+# Initialize the database from CSV
+def init_db_from_csv():
     conn = sqlite3.connect('users.db')
     c = conn.cursor()
+
+    # Create users table
     c.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -17,13 +20,25 @@ def init_db():
             filename TEXT NOT NULL
         )
     ''')
-    # Add users
-    c.execute("INSERT OR IGNORE INTO users (user_id, password, filename) VALUES (?, ?, ?)",
-              ('123456789', '6789', 'certificate.pdf'))  # Update filename if needed
+
+    # Optional: clear existing entries
+    c.execute('DELETE FROM users')
+
+    # Load from users.csv
+    try:
+        with open('users.csv', 'r', newline='', encoding='utf-8') as csvfile:
+            reader = csv.DictReader(csvfile)
+            for row in reader:
+                c.execute("INSERT OR IGNORE INTO users (user_id, password, filename) VALUES (?, ?, ?)",
+                          (row['user_id'].strip(), row['password'].strip(), row['filename'].strip()))
+    except FileNotFoundError:
+        print("⚠️ users.csv not found! Please ensure it is uploaded.")
+
     conn.commit()
     conn.close()
 
-init_db()
+# Run at startup
+init_db_from_csv()
 
 @app.route('/')
 def index():
@@ -31,8 +46,8 @@ def index():
 
 @app.route('/login', methods=['POST'])
 def login():
-    user_id = request.form['user_id']
-    password = request.form['password']
+    user_id = request.form['user_id'].strip()
+    password = request.form['password'].strip()
 
     conn = sqlite3.connect('users.db')
     c = conn.cursor()
